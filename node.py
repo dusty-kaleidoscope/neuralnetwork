@@ -27,6 +27,31 @@ def mse_grad(y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
 	
 	return -2 * (y_true - y_pred) * (1 / y_true.numel())
 
+def bce(y_true: torch.Tensor, y_pred: torch.Tensor) -> float:
+	"""Binary Cross Entropy
+
+	Assumes data is 1 or 0 (for one-hot encoded data, use cce below)
+	"""
+
+	k, n = y_true.shape
+	log_predicted_proba = y_pred.log()
+	log_predicted_oneminus = (1 - y_pred).log()
+	bce = -1 * (y_true * log_predicted_proba + (1 - y_true) * log_predicted_oneminus).sum(dim = 0, keepdim = True) # This should be a 1-by-1 tensor
+	return bce / n
+
+def bce_grad(y_true: torch.Tensor, y_pred: torch.Tensor) -> float:
+	"""assumes none of the predictions are 0 or 1 exactly, i.e. no perfect certainty
+	"""
+	
+	_, n = y_true.shape
+
+	y_pred_recip = y_pred.reciprocal()
+	y_pred_oneminus_recip = (1 - y_pred).reciprocal()
+	bce_grad = -1 * (y_true * y_pred_recip - (1 - y_true) * (y_pred_oneminus_recip))
+
+	return bce_grad / n
+
+
 def cce(y_true: torch.Tensor, y_pred: torch.Tensor) -> float:
 	"""Categorical cross entropy
 

@@ -1,5 +1,5 @@
 import node
-from node import mse, mse_grad, cce, cce_grad
+from node import mse, mse_grad, bce, bce_grad, cce, cce_grad
 import layer
 
 from typing import List
@@ -24,7 +24,7 @@ class NeuralNetwork:
 
 	+params (List[ParameterLayer]): the parameters of the neural network, may be saved separately
 	+input_layers (List[Layer]): the layers which store states reliant on user inputs
-
+	+architecture (List[(int, str)]): describes architecture of model
 	Methods:
 	+randomize_params(self) -> NeuralNetwork: randomizes the parameters of the neural network. Returns the network itself
 	+zero_grad(self) -> NeuralNetwork: zeros out the gradients and returns the network itself 
@@ -33,12 +33,15 @@ class NeuralNetwork:
 	+train (self, torch.Tensor, torch.Tensor, str, float) -> NeuralNetwork: updates the parameters of the neural network given training data and supported error function
 	+save_params (self) -> List[ParameterLayer]: cleans (disconnects and clears state) the parameter layers and returns them
 	+print_network (self) -> None: prints the network
-	+to_device(self, torch.device): moves parameters to device. User is responsible for putting inputs on device
+	+to_device(self, torch.device) -> NeuralNetwork: moves parameters to device. User is responsible for putting inputs on device. Returns the network
+	+copy(self, NeuralNetwork) -> NeuralNetwork: copies parameter values (not state values) from our model into the target and returns the target
+	+add_delta(self, int, str, delta) -> NeuralNetwork: adds a delta to a certain parameter within the neural network, then returns the network itself. Used in gradient checking.
 	"""
-	def __init__(self, architecture):
+	def __init__(self, architecture: List):
 
 		self.params = []
 		self.input_layers = []
+		self.architecture = architecture
 
 		n = len(architecture)
 
@@ -111,6 +114,9 @@ class NeuralNetwork:
 		
 		if error == "mse":
 			self.input_layers[n - 1].post.backward_value = mse_grad(y, y_pred)
+		
+		elif error == "bce":		
+			self.input_layers[n - 1].post.backward_value = bce_grad(y, y_pred)
 		elif error == "cce":
 			self.input_layers[n - 1].post.backward_value = cce_grad(y, y_pred)
 		else:
@@ -138,3 +144,70 @@ class NeuralNetwork:
 
 		for layer in self.params:
 			layer.print_params()
+
+	def copy(self, my_target: "NeuralNetwork") -> "NeuralNetwork":
+		"""note that we only copy the parameter values, not any stored state values (e.g. from prediction)
+		"""
+
+		n = len(my_target.params)
+
+		for i in range(n):
+			my_target.params[i].weight.forward_value = self.params[i].weight.forward_value.clone()
+			my_target.params[i].bias.forward_value = self.params[i].bias.forward_value.clone()
+
+		return my_target
+
+	def add_delta(self, layer: int, w_or_b: str, delta: torch.Tensor) -> "NeuralNetwork":
+	
+		if w_or_b == "weight":
+
+			self.params[layer].weight.forward_value += delta
+			return self
+
+		elif w_or_b == "bias":
+
+			self.params[layer].bias.forward_value += delta
+			return self
+
+		else:
+			raise ValueError("Must specify either \"weight\" or \"bias\" for add_delta function.")
+
+	
+	def compute_grads(self, X: torch.Tensor, y: torch.Tensor, error: str) -> "NeuralNetwork":
+		"""this computes the gradients but doesn't update
+		for our purposes, primarily used during gradient checking
+		"""
+
+		n = len(self.input_layers)
+
+		self.zero_grad()
+		self.clear_state()
+
+		y_pred = self.predict(X) # forward pass now complete
+		
+		if error == "mse":
+			self.input_layers[n - 1].post.backward_value = mse_grad(y, y_pred)
+
+		elif error == "bce":		
+			self.input_layers[n - 1].post.backward_value = bce_grad(y, y_pred)
+		elif error == "cce":
+			self.input_layers[n - 1].post.backward_value = cce_grad(y, y_pred)
+		else:
+			raise ValueError("Neural network training issue: Error not recognized")  
+
+		for i in range(n):
+			self.input_layers[n - 1 - i].backward_pass()
+			if i < n - 1:
+				self.params[n - 1 - 1 - i].backward_pass()
+
+		return self
+
+	def update(self, learning_rate: float):
+		"""updates using the existing gradient values
+		"""
+
+		for i in range(len(self.params)):
+			self.params[i].update(learning_rate)
+
+		return self
+
