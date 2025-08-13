@@ -2,8 +2,10 @@
 
 ## High Priority
 
-* Implement gradient checking test
-* Add regression test example
+* ~~Implement gradient checking test~~
+* ~~Add regression test example~~
+* Add explicit example illustrating issues w/ ReLu and gradient checking
+* Add reproducible example of gradient vanishing or getting to big
 
 ## Other
 
